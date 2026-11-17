@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 class="title">受理人归属</h1>
+{% if agents %}
+<p class="statline">
+  <span>可归属行 <b class="num">{{ agents.total.rows|intf }}</b></span>
+  <span>计入 <b class="num">{{ agents.counted.rows|intf }}</b> 行 / {{ agents.counted.agents }} 人</span>
+  <span>未计入 <b class="num">{{ agents.uncounted.rows|intf }}</b> 行</span>
+  <span>缺口格 计入 <b class="num">{{ agents.counted.missing_cells|intf }}</b> · 未计入 <b class="num">{{ agents.uncounted.missing_cells|intf }}</b></span>
+  <span>归属账 {% if agents.all_balanced %}<b class="ok">闭口</b>{% else %}<b class="bad">不闭口</b>{% endif %}</span>
+</p>
+
+<section class="block">
+  <h2 class="block__title">计入 · 按坐席<span class="block__hint">工号 / 全名 / 英文名已合并为同一坐席</span></h2>
+  {% if agents.agents %}
+  <table class="ledger" data-sortable>
+    <thead>
+      <tr><th>坐席</th><th>工号</th><th>别名</th><th class="num">行</th>
+          <th class="num">缺失格</th><th class="num">缺失率</th><th>缺口列</th><th>行号</th></tr>
+    </thead>
+    <tbody>
+      {% for agent in agents.agents %}
+      <tr>
+        <td>{{ agent.display_name }}<span class="sub">{{ agent.agent_id }}</span></td>
+        <td class="mono">{{ agent.agent_id }}</td>
+        <td class="mono">{{ agent.aliases|join(" / ") }}</td>
+        <td class="num">{{ agent.rows|intf }}</td>
+        <td class="num">{{ agent.missing_cells|intf }}</td>
+        <td class="num">{{ agent.missing_rate|pct }}</td>
+        <td>
+          {% for column in agent.by_column_rows if column.missing %}
+          <span class="tag">{{ column.label }} {{ column.missing }}</span>
+          {% endfor %}
+        </td>
+        <td class="mono">{{ agent.linenos|join(" ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">没有可计入的坐席行；先补映射再重算。</p>
+  {% endif %}
+</section>
+
+<section class="block">
+  <h2 class="block__title">未计入 · 待裁决<span class="block__hint">不摊进任何坐席，行号可逐条核实</span></h2>
+  <table class="ledger" data-sortable>
+    <thead>
+      <tr><th>桶</th><th>原因</th><th class="num">行</th><th class="num">缺口格</th>
+          <th>标记值（出现次数）</th><th>行号</th></tr>
+    </thead>
+    <tbody>
+      {% for bucket in agents.unresolved %}
+      <tr>
+        <td>{{ bucket.label }}<span class="sub">{{ bucket.code }}</span></td>
+        <td>
+          {% if bucket.key == "ambiguous" %}同名多工号 / 仅姓名，无法确认
+          {% elif bucket.key == "conflict" %}同一标记值映射到多个工号
+          {% elif bucket.key == "unmapped" %}标记值不在映射内
+          {% else %}受理人单元格缺失{% endif %}
+        </td>
+        <td class="num">{{ bucket.rows|intf }}</td>
+        <td class="num">{{ bucket.missing_cells|intf }}</td>
+        <td>
+          {% for value, count in bucket.raw_values.items() %}
+          <span class="tag">{{ value or "（空）" }} × {{ count }}</span>
+          {% endfor %}
+        </td>
+        <td class="mono">{{ bucket.linenos|join(" ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if agents.unresolved|selectattr("worklist")|list %}
+<section class="block">
+  <h2 class="block__title">裁决工作台<span class="block__hint">按出现次数排序</span></h2>
+  <table class="ledger">
+    <thead><tr><th>标记值</th><th class="num">出现行数</th><th>候选工号</th></tr></thead>
+    <tbody>
+      {% for bucket in agents.unresolved %}
+      {% for item in bucket.worklist %}
+      <tr>
+        <td class="mono">{{ item.raw or "（空）" }}<span class="sub">{{ bucket.label }}</span></td>
+        <td class="num">{{ item.count|intf }}</td>
+        <td class="mono">{% if item.candidates %}{{ item.candidates|join(" / ") }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section class="block">
+  <h2 class="block__title">归属账<span class="block__hint">计入 + 未计入 恒等于可归属口径</span></h2>
+  <table class="ledger">
+    <thead><tr><th>账</th><th class="num">左侧</th><th class="num">右侧</th><th class="num">差额</th><th>结论</th></tr></thead>
+    <tbody>
+      {% for account in agents.accounts %}
+      <tr>
+        <td>{{ account.label }}<span class="sub">{{ account.note }}</span></td>
+        <td class="num">{{ account.left }}</td>
+        <td class="num">{{ account.right }}</td>
+        <td class="num">{{ account.diff }}</td>
+        <td>{% if account.balanced %}<span class="sev sev--pass">平衡</span>{% else %}<span class="sev sev--severe">不平</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if mapping_change and mapping_change.uncounted_before is not none %}
+<section class="block">
+  <h2 class="block__title">映射更新影响</h2>
+  <ul class="pairs pairs--two">
+    <li class="pair"><span class="pair__key">新增坐席</span><span class="pair__value">{% if mapping_change.added_agents %}{{ mapping_change.added_agents|join(" / ") }}{% else %}<span class="dash">—</span>{% endif %}</span></li>
+    <li class="pair"><span class="pair__key">消失坐席</span><span class="pair__value">{% if mapping_change.removed_agents %}{{ mapping_change.removed_agents|join(" / ") }}{% else %}<span class="dash">—</span>{% endif %}</span></li>
+    <li class="pair"><span class="pair__key">迁移行数</span><span class="pair__value num">{{ mapping_change.moved_rows|intf }}</span></li>
+    <li class="pair"><span class="pair__key">未计入行数</span><span class="pair__value num">{{ mapping_change.uncounted_before|intf }} → {{ mapping_change.uncounted_after|intf }}</span></li>
+  </ul>
+</section>
+{% endif %}
+
+<section class="block">
+  <h2 class="block__title">映射<span class="block__hint">{{ agents.mapping.source }} · sha256 <code>{{ agents.mapping.digest[:16] }}</code></span></h2>
+  <p class="statline">
+    <span>条目 <b class="num">{{ agents.mapping.entry_count }}</b></span>
+    <span>有工号 <b class="num">{{ agents.mapping.mapped_count }}</b></span>
+    <span>仅姓名 <b class="num">{{ agents.mapping.name_only_count }}</b></span>
+    <span>自相矛盾 <b class="num">{{ agents.mapping.conflict_count }}</b></span>
+  </p>
+  {% if agents.mapping.conflicts %}
+  <table class="ledger">
+    <thead><tr><th>标记值</th><th>冲突工号</th><th>映射行号</th><th>处理</th></tr></thead>
+    <tbody>
+      {% for item in agents.mapping.conflicts %}
+      <tr>
+        <td class="mono">{{ item.raw }}</td>
+        <td class="mono">{{ item.agent_ids|join(" / ") }}</td>
+        <td class="mono">{{ item.linenos|join(" ") }}</td>
+        <td>{{ item.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <form id="mapping-form" class="form" data-dataset="{{ run.name if run else '' }}">
+    <label class="field" style="flex:1 1 420px">
+      <span class="field__label">映射 CSV（raw,agent_id,display_name）</span>
+      <textarea class="field__input field__input--area" rows="8" id="mapping-text" name="mapping" spellcheck="false">{{ mapping_text }}</textarea>
+    </label>
+    <div class="actions">
+      <button class="btn" type="button" id="mapping-check">只校验</button>
+      <button class="btn btn--primary" type="button" id="mapping-save">保存并重算</button>
+    </div>
+  </form>
+  <p class="status" id="mapping-status" role="status" aria-live="polite"></p>
+  <p class="aside">保存后整份重算：缺口、归属账、报告与六种导出一起换成新版本；同名数据同一映射重跑不新增版本。</p>
+</section>
+
+{% if attempts %}
+<section class="block">
+  <h2 class="block__title">未发布的尝试<span class="block__hint">回滚不影响上一完整版本</span></h2>
+  <table class="ledger">
+    <thead><tr><th>时间</th><th>数据集</th><th class="num">目标版本</th><th>结果</th><th>说明</th><th>证据</th></tr></thead>
+    <tbody>
+      {% for item in attempts %}
+      <tr>
+        <td class="mono">{{ item.attempted_at|localdt }}</td>
+        <td class="mono">{{ item.name }}</td>
+        <td class="num">v{{ item.version }}</td>
+        <td class="mono">{{ item.code }}</td>
+        <td>{{ item.detail }}</td>
+        <td class="mono">{% if item.run %}{{ item.run.run_id }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section class="block">
+  <h2 class="block__title">导出</h2>
+  <p class="links">
+    <a class="link" href="/api/export/agents.csv">归属 CSV</a>
+    <a class="link" href="/api/export/agents_unresolved.csv">未计入 CSV</a>
+    <a class="link" href="/api/export/agents_rows.csv">逐行归属 CSV</a>
+    <a class="link" href="/api/export/mapping.csv">映射 CSV</a>
+    <a class="link" href="/api/export/report.csv">报告 CSV</a>
+    <a class="link" href="/api/export/manifest.json">运行清单 JSON</a>
+  </p>
+</section>
+{% else %}
+<p class="empty">还没有运行记录。</p>
+{% endif %}
+{% endblock %}

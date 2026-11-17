@@ -38,6 +38,12 @@ REASONS: dict[str, dict[str, str]] = {
     "K_KEY_CONFLICT": {"label": "同键取值冲突", "level": "warn"},
     "K_CAPPED": {"label": "该维扣分已封顶", "level": "info"},
     "K_REPLAY": {"label": "同输入重跑复用", "level": "info"},
+    "K_AGENT_ATTR": {"label": "受理人身份已归属", "level": "info"},
+    "K_AGENT_AMBIGUOUS": {"label": "受理人身份存在歧义", "level": "warn"},
+    "K_AGENT_CONFLICT": {"label": "受理人映射自相矛盾", "level": "warn"},
+    "K_AGENT_UNMAPPED": {"label": "受理人未在映射内", "level": "warn"},
+    "K_AGENT_NO_IDENTITY": {"label": "受理人缺失无身份可归", "level": "warn"},
+    "K_AGENT_MAPPING_CHANGED": {"label": "映射影响归属结果", "level": "info"},
 }
 
 

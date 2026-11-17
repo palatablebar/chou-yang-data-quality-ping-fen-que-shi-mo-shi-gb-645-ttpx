@@ -24,6 +24,7 @@ NAV = (
     ("/missing", "缺失", "missing"),
     ("/duplicates", "重复", "duplicates"),
     ("/outliers", "离群", "outliers"),
+    ("/agents", "归属", "agents"),
     ("/batches", "批次", "batches"),
 )
 

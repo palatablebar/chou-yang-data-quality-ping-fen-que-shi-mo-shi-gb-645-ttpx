@@ -11,6 +11,7 @@ router = APIRouter(tags=["M6 评分与批次"])
 
 
 def _public(result: dict) -> dict:
+    agents = result.get("agents") or {}
     return {
         "run": result["run"],
         "score": result["score"]["score"],
@@ -21,8 +22,16 @@ def _public(result: dict) -> dict:
         "bands": result["score"]["bands"],
         "closed": result["score"]["closed"],
         "replay": result.get("replay", False),
+        "publish": result.get("publish"),
         "counts": result["manifest"]["counters"],
         "reconcile": result["reconcile"],
+        "agents": {
+            "counted": agents.get("counted"),
+            "uncounted": agents.get("uncounted"),
+            "total": agents.get("total"),
+            "mapping": agents.get("mapping"),
+        },
+        "mapping_change": result.get("mapping_change"),
         "dataset": result["dataset"]["name"],
     }
 
@@ -42,11 +51,17 @@ def api_score(payload: dict | None = None, ctx: Ctx = Depends(get_ctx)) -> dict:
 async def api_score_upload(file: UploadFile = File(...),
                            encoding: str = Form(default=""),
                            expected_version: str = Form(default=""),
+                           agent_mapping: UploadFile | None = File(default=None),
                            ctx: Ctx = Depends(get_ctx)) -> dict:
     data = await file.read()
+    mapping_bytes = None
+    if agent_mapping is not None:
+        mapping_bytes = await agent_mapping.read()
     result = service.run(ctx.settings, ctx.store, name=file.filename or "upload.csv",
                          data=data, declared=encoding or None,
-                         expected_version=expected_version or None)
+                         expected_version=expected_version or None,
+                         agent_mapping=mapping_bytes,
+                         mapping_source="upload" if mapping_bytes is not None else None)
     return _public(result)
 
 
@@ -85,4 +100,5 @@ def page_batches(request: Request, run_id: str | None = None,
     return render(request, "batches.html", page="batches", page_title="评分批次",
                   run=run, result=result, runs=runs,
                   reconcile=result["reconcile"] if result else None,
+                  attempts=ctx.store.list_publish_attempts(limit=8),
                   thresholds=runstore.thresholds())

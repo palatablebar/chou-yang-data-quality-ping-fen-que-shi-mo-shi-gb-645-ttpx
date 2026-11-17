@@ -71,6 +71,52 @@
 </section>
 
 <section class="block">
+  <h2 class="block__title">受理人归属<span class="block__hint">计入 {{ report.agents.counted.rows|intf }} 行 · 未计入 {{ report.agents.uncounted.rows|intf }} 行</span></h2>
+  <p class="statline">
+    <span>可归属行 <b class="num">{{ report.agents.total.rows|intf }}</b></span>
+    <span>计入 <b class="num">{{ report.agents.counted.rows|intf }}</b> / {{ report.agents.counted.agents }} 人</span>
+    <span>未计入 <b class="num">{{ report.agents.uncounted.rows|intf }}</b></span>
+    <span>计入缺口 <b class="num">{{ report.agents.counted.missing_cells|intf }}</b> 格</span>
+    <span>未计入缺口 <b class="num">{{ report.agents.uncounted.missing_cells|intf }}</b> 格</span>
+    <span>归属账 {% if report.agents.balanced %}<b class="ok">闭口</b>{% else %}<b class="bad">不闭口</b>{% endif %}</span>
+  </p>
+  {% if report.agents.mapping.source in ("none", "sample") %}
+  <p class="aside">当前映射来源：{% if report.agents.mapping.source == "none" %}没有映射{% else %}样例自带{% endif %} · 在 <a class="link" href="/agents?run_id={{ run.run_id }}">归属页</a> 补全映射前，未计入的行不会被摊到任何坐席。</p>
+  {% endif %}
+  {% if report.agents.top %}
+  <table class="ledger ledger--wide">
+    <thead><tr><th>坐席</th><th>工号</th><th class="num">行</th><th class="num">缺失格</th><th class="num">缺失率</th><th>缺口列</th></tr></thead>
+    <tbody>
+      {% for agent in report.agents.top %}
+      <tr>
+        <td>{{ agent.display_name }}</td>
+        <td class="mono">{{ agent.agent_id }}</td>
+        <td class="num">{{ agent.rows|intf }}</td>
+        <td class="num">{{ agent.missing_cells|intf }}</td>
+        <td class="num">{{ agent.missing_rate|pct }}</td>
+        <td>{% for column in agent.by_column_rows if column.missing %}<span class="tag">{{ column.label }} {{ column.missing }}</span> {% endfor %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <table class="ledger ledger--wide">
+    <thead><tr><th>未计入桶</th><th class="num">行</th><th class="num">缺口格</th><th>处理</th></tr></thead>
+    <tbody>
+      {% for bucket in report.agents.unresolved %}
+      <tr>
+        <td>{{ bucket.label }}<span class="sub">{{ bucket.code }}</span></td>
+        <td class="num">{{ bucket.rows|intf }}</td>
+        <td class="num">{{ bucket.missing_cells|intf }}</td>
+        <td>{% if bucket.rows %}单列待裁决，可在 <a class="link" href="/agents?run_id={{ run.run_id }}">归属页</a> 补映射{% else %}<span class="dash">—</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="aside">映射 {{ report.agents.mapping.entry_count or 0 }} 条 · 有工号 {{ report.agents.mapping.mapped_count or 0 }} · 仅姓名 {{ report.agents.mapping.name_only_count or 0 }} · 冲突 {{ report.agents.mapping.conflict_count or 0 }} · sha256 <code>{{ (report.agents.mapping.digest or "")[:16] }}</code></p>
+</section>
+
+<section class="block">
   <h2 class="block__title">对账<span class="block__hint">{% if report.balanced %}五项平衡{% else %}差异 {{ report.accounts|selectattr("balanced", "equalto", false)|list|length }} 项{% endif %}</span></h2>
   <table class="ledger">
     <thead>
@@ -155,6 +201,8 @@
   <p class="links">
     <a class="link" href="/api/export/report.csv">报告 CSV</a>
     <a class="link" href="/api/export/profile.csv">画像 CSV</a>
+    <a class="link" href="/api/export/agents.csv">归属 CSV</a>
+    <a class="link" href="/api/export/agents_unresolved.csv">未计入 CSV</a>
     <a class="link" href="/api/export/quarantine.csv">隔离区 CSV</a>
     <a class="link" href="/api/export/manifest.json">运行清单 JSON</a>
   </p>

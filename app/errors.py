@@ -40,6 +40,13 @@ class UnprocessableInput(QualiscoreError):
     code = "E_INPUT"
 
 
+class PublishFailed(QualiscoreError):
+    """发布事务失败：已整体回滚，上一完整版本继续服务，失败尝试已留痕。"""
+
+    status_code = 503
+    code = "E_PUBLISH_INTERRUPTED"
+
+
 def install_handlers(app) -> None:
     from fastapi import Request
     from fastapi.responses import JSONResponse

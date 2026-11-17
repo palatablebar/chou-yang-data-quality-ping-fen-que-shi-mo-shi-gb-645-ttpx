@@ -58,6 +58,27 @@ def export_flags(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)):
     return service.export(ctx.store, "flags.csv", run_id)
 
 
+@router.get("/api/export/agents.csv")
+def export_agents(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)):
+    return service.export(ctx.store, "agents.csv", run_id)
+
+
+@router.get("/api/export/agents_unresolved.csv")
+def export_agents_unresolved(run_id: str | None = None,
+                             ctx: Ctx = Depends(get_ctx)):
+    return service.export(ctx.store, "agents_unresolved.csv", run_id)
+
+
+@router.get("/api/export/agents_rows.csv")
+def export_agents_rows(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)):
+    return service.export(ctx.store, "agents_rows.csv", run_id)
+
+
+@router.get("/api/export/mapping.csv")
+def export_mapping(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)):
+    return service.export(ctx.store, "mapping.csv", run_id)
+
+
 @router.get("/api/export/manifest.json")
 def export_manifest(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)):
     return service.export(ctx.store, "manifest.json", run_id)

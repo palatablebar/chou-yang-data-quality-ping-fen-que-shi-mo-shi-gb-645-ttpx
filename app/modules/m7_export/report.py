@@ -29,6 +29,7 @@ def build(result: dict) -> dict:
                                             -Decimal(item["format_rate"]),
                                             item["name"]))
     counters = result["manifest"]["counters"]
+    agents = result.get("agents") or {}
     return {
         "run": result["run"],
         "dataset": result["dataset"],
@@ -50,5 +51,19 @@ def build(result: dict) -> dict:
         "stages": result["manifest"]["stages"],
         "thresholds": result["manifest"]["thresholds"],
         "manifest": result["manifest"],
+        "agents": {
+            "top": sorted(agents.get("agents", []),
+                          key=lambda item: (-item["missing_cells"],
+                                            item["agent_id"]))[:6],
+            "counted": agents.get("counted", {}),
+            "uncounted": agents.get("uncounted", {}),
+            "total": agents.get("total", {}),
+            "unresolved": agents.get("unresolved", []),
+            "accounts": agents.get("accounts", []),
+            "balanced": agents.get("all_balanced"),
+            "mapping": agents.get("mapping", {}),
+        },
+        "mapping_change": result.get("mapping_change"),
+        "publish": result.get("publish"),
     }
 

@@ -7,9 +7,12 @@ from pathlib import Path
 from fixtures import dirty_cases, expected
 
 SAMPLE_DIR = Path(__file__).resolve().parent.parent / "sample_data"
-PAGES = ("/", "/profile", "/missing", "/duplicates", "/outliers", "/batches")
+PAGES = ("/", "/profile", "/missing", "/duplicates", "/outliers", "/agents",
+         "/batches")
 EXPORTS = ("report.csv", "profile.csv", "missing.csv", "duplicates.csv",
-           "outliers.csv", "quarantine.csv", "flags.csv", "manifest.json")
+           "outliers.csv", "quarantine.csv", "flags.csv", "agents.csv",
+           "agents_unresolved.csv", "agents_rows.csv", "mapping.csv",
+           "manifest.json")
 
 
 def test_full_pipeline_over_http(client):

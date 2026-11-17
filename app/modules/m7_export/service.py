@@ -17,6 +17,12 @@ EXPORTS = {
     "quarantine.csv": ("quarantine.csv", "text/csv; charset=utf-8",
                        csv_out.quarantine_csv),
     "flags.csv": ("flags.csv", "text/csv; charset=utf-8", csv_out.flags_csv),
+    "agents.csv": ("agents.csv", "text/csv; charset=utf-8", csv_out.agents_csv),
+    "agents_unresolved.csv": ("agents_unresolved.csv", "text/csv; charset=utf-8",
+                              csv_out.agents_unresolved_csv),
+    "agents_rows.csv": ("agents_rows.csv", "text/csv; charset=utf-8",
+                        csv_out.agents_rows_csv),
+    "mapping.csv": ("mapping.csv", "text/csv; charset=utf-8", csv_out.mapping_csv),
 }
 
 

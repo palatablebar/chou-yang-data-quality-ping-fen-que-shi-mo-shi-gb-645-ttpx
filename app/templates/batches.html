@@ -59,6 +59,37 @@
         <td>{% if account.balanced %}<span class="sev sev--pass">平衡</span>{% else %}<span class="sev sev--severe">不平</span>{% endif %}</td>
       </tr>
       {% endfor %}
+      {% for account in reconcile.agent_accounts %}
+      <tr>
+        <td>{{ account.label }}<span class="sub">计入 + 未计入</span></td>
+        <td class="num">{{ account.left }}</td>
+        <td class="num">{{ account.right }}</td>
+        <td class="num">{{ account.diff }}</td>
+        <td>{% if account.balanced %}<span class="sev sev--pass">平衡</span>{% else %}<span class="sev sev--severe">不平</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="aside">受理人计入 {{ reconcile.agent_counted_rows|intf }} 行 / 缺口 {{ reconcile.agent_counted_missing|intf }} 格 · 未计入 {{ reconcile.agent_uncounted_rows|intf }} 行 / 缺口 {{ reconcile.agent_uncounted_missing|intf }} 格 · <a class="link" href="/agents?run_id={{ run.run_id }}">去归属页补映射</a></p>
+</section>
+{% endif %}
+
+{% if attempts %}
+<section class="block">
+  <h2 class="block__title">未发布的尝试<span class="block__hint">发布中断时回退上一完整版本，结果仍留痕</span></h2>
+  <table class="ledger">
+    <thead><tr><th>时间</th><th>数据集</th><th class="num">目标版本</th><th>结果</th><th>说明</th><th>批次号</th></tr></thead>
+    <tbody>
+      {% for item in attempts %}
+      <tr>
+        <td class="mono">{{ item.attempted_at|localdt }}</td>
+        <td class="mono">{{ item.name }}</td>
+        <td class="num">v{{ item.version }}</td>
+        <td class="mono">{{ item.code }}</td>
+        <td>{{ item.detail }}</td>
+        <td class="mono">{% if item.run %}{{ item.run.run_id }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
 </section>
@@ -71,6 +102,8 @@
     <a class="link" href="/api/export/missing.csv">导出缺失</a>
     <a class="link" href="/api/export/duplicates.csv">导出重复</a>
     <a class="link" href="/api/export/outliers.csv">导出离群</a>
+    <a class="link" href="/api/export/agents.csv">导出归属</a>
+    <a class="link" href="/api/export/agents_unresolved.csv">导出未计入</a>
     <a class="link" href="/api/export/quarantine.csv">隔离区 CSV</a>
     <a class="link" href="/api/export/manifest.json">运行清单 JSON</a>
   </p>

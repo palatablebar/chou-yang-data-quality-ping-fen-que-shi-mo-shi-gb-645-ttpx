@@ -1,6 +1,6 @@
 # 深度登记 qualiscore（抽样数据质量评分与缺失模式）
 
-- 规模：中型（7 个功能模块 / 6 个应用页 / 97 条测试）
+- 规模：中型（8 个功能模块 / 7 个应用页 / 122 条测试）
 - 核心规则：**MAD 稳健 z + 退化回退 + 封顶加权评分**。逐格先判三态（缺失 / 格式不合格 / 有值），
   再按列算中位数与 MAD；`z = 0.6745 × (x − 中位数) / MAD`，MAD=0 时回退 `spread = 0.6745 × IQR / 1.349`，
   离散度低于「列刻度 × 5」或 MAD 与 IQR 同为 0 判退化；评分 = 100 − 缺失 30 − 重复 25 − 离群 20 − 格式 25，
@@ -18,9 +18,10 @@
 | M4 重复判定 | 看全行重复组与同键冲突的原值对照 | GET /api/duplicates、页面 /duplicates | `app/modules/m4_duplicates/hashdup.py` `app/modules/m4_duplicates/keydup.py` `app/modules/m4_duplicates/groups.py` `app/modules/m4_duplicates/service.py` | `tests/test_m4_duplicates.py` |
 | M5 稳健离群 | 看逐列中位数、MAD、回退方法与离群格 | GET /api/outliers、页面 /outliers | `app/modules/m5_outliers/robust.py` `app/modules/m5_outliers/zscore.py` `app/modules/m5_outliers/flags.py` `app/modules/m5_outliers/service.py` | `tests/test_m5_outliers.py` |
 | M6 评分与批次 | 跑一次评分、查运行历史、看五项对账、重跑 | POST /api/score、GET /api/batches、GET /api/reconcile、页面 /batches | `app/modules/m6_score/score.py` `app/modules/m6_score/grade.py` `app/modules/m6_score/runstore.py` `app/modules/m6_score/service.py` | `tests/test_m6_score.py` |
-| M7 报告导出 | 看报告页、导出六种 CSV 与运行清单 | GET /、GET /api/export/* | `app/modules/m7_export/report.py` `app/modules/m7_export/csv_out.py` `app/modules/m7_export/manifest_out.py` `app/modules/m7_export/service.py` | `tests/test_m7_export.py` |
+| M7 报告导出 | 看报告页、导出十一种 CSV 与运行清单 | GET /、GET /api/export/* | `app/modules/m7_export/report.py` `app/modules/m7_export/csv_out.py` `app/modules/m7_export/manifest_out.py` `app/modules/m7_export/service.py` | `tests/test_m7_export.py` |
+| M8 受理人归属 | 看计入 / 未计入两本账、改映射、重算发布 | GET /agents、GET/PUT/POST /api/agents/mapping、POST /api/agents/recompute、GET /api/publish/attempts | `app/modules/m8_agents/attribution.py` `app/modules/m8_agents/service.py` `app/modules/m8_agents/handler.py` | `tests/test_m8_agents.py` |
 
-端到端：`tests/test_e2e.py`（HTTP 走完采信 → 评分 → 六页 200 → 八种导出；含上传、失败输入、陈旧版本 409）。
+端到端：`tests/test_e2e.py`（HTTP 走完采信 → 评分 → 七页 200 → 十二种导出（11 CSV + 清单 JSON）；含上传、失败输入、陈旧版本 409）。
 不变量：`tests/test_invariants.py`（行分区、单元格分区、分数闭合、幂等重跑、重复分区、顺序无关、缺失扣分单调）。
 
 ## 陷阱登记
@@ -38,6 +39,10 @@
 | TRAP-19 | 一个单元格同时像缺失、越界、离群 | 按代码顺序覆盖，分项之和大于总分 | 固定优先级缺失 > 格式不合格 > 离群，一格只进一个桶 | `app/modules/m5_outliers/flags.py`、`app/modules/m2_profile/formats.py` | `tests/test_m5_outliers.py::test_priority_missing_over_range_over_outlier` |
 | TRAP-22 | 同一组重复行打乱顺序 | 代表行随顺序变化，导出结果不可复现 | 代表行取最小原始行号，组排序按代表行号 | `app/modules/m4_duplicates/groups.py`、`app/modules/m4_duplicates/hashdup.py` | `tests/test_m4_duplicates.py::test_order_independence_of_groups` |
 | TRAP-26 | 旧页面提交覆盖新结果 | 后提交无条件写入，新版本被旧数据顶掉 | 同名数据集版本自增，`expected_version` 落后即 409 | `app/modules/m6_score/runstore.py` | `tests/test_m6_score.py::test_stale_submission_rejected`、`tests/test_e2e.py::test_stale_version_conflict_over_http` |
+| TRAP-31 | 同一个人混用工号、全名、英文名 | 按姓名合并会把同名坐席误并；不合并又把一个人摊成多组缺口 | 只认显式映射；同工号多写法合并、同名不同工号分开；只给姓名 / 冲突 / 未映射 / 受理人缺失进「未计入」账并保留行号 | `app/modules/m8_agents/attribution.py` | `tests/test_m8_agents.py::test_three_spellings_merge_into_one_agent`、`tests/test_m8_agents.py::test_homonyms_are_not_merged_by_name`、`tests/test_m8_agents.py::test_name_only_value_goes_to_ambiguous_with_linenos` |
+| TRAP-32 | 映射更新后旧报告还在用旧归属 | 只改映射不重算，页面缺口与导出口径不一致 | 映射摘要参与 `input_digest`；映射更新即整份重算并发布新版本 | `app/manifest.py`、`app/modules/m6_score/service.py` | `tests/test_m8_agents.py::test_mapping_digest_changes_input_identity`、`tests/test_m8_agents.py::test_mapping_update_recomputes_gaps_and_report_together` |
+| TRAP-33 | 发布写到一半进程中断 | 半条运行记录对外可见，或回滚把整批记录一起删掉 | 运行行 + 原文 + 映射 + 指针同一事务；失败整体回滚到上一完整版本，尝试落 `publish_attempts` | `app/store.py`、`app/modules/m6_score/runstore.py` | `tests/test_m8_agents.py::test_publish_interruption_rolls_back_to_previous_version`、`tests/test_m8_agents.py::test_failed_mapping_update_keeps_old_mapping_and_report` |
+| TRAP-34 | 同一附件重跑产生新版本或重复计数 | 每次运行都自增版本，缺口被同一批行加两遍 | 幂等键含映射摘要；命中即复用同一运行记录 | `app/modules/m6_score/runstore.py`、`app/modules/m6_score/service.py` | `tests/test_m8_agents.py::test_same_attachment_same_mapping_is_idempotent`、`tests/test_m8_agents.py::test_replay_after_publish_does_not_double_count` |
 
 ## 对账规则
 
@@ -50,6 +55,8 @@
 | 单元格账 | 单元格 | 缺失 + 有值 | 510 = 14 + 496 |
 | 有值格账 | 有值 | 合格 + 格式不合格 | 496 = 494 + 2 |
 | 分数账 | 100 | 总分 + 扣分 | 100 = 65.24 + 34.76 |
+| 归属行账 | 采纳行 | 计入 + 未计入 | 30 = 20 + 10（受理人样例） |
+| 归属缺口账 | 缺失格 | 坐席缺口 + 未计入缺口 | 3 = 2 + 1（受理人样例） |
 
 ## 反例与不变量
 
@@ -64,10 +71,13 @@
   `tests/test_invariants.py::test_score_is_order_independent`（顺序无关）、
   `tests/test_invariants.py::test_missing_penalty_is_monotonic`（单调）。
 - 端到端：`tests/test_e2e.py::test_full_pipeline_over_http`。
+- 归属不变量：`tests/test_m8_agents.py::test_counted_plus_uncounted_closes`、
+  `tests/test_m8_agents.py::test_row_level_attribution_traces_every_row`。
 
 ## 已知不覆盖
 
 - 只按整份文件重算，不支持增量追加与断点续跑；同名数据集重跑即全量重算。
+- 受理人映射不做模糊匹配、不学相似度：只认显式映射表，歧义交人工裁决。
 - 列契约固定 10 列（`app/config.py`），新增列按未知列忽略而不报错；自定义列需要改契约与别名。
 - 权重、容忍度、等级阈值写在配置里，改完必须重新运行；不支持页面上调参。
 - 只处理 UTF-8 / GB18030 两类编码；UTF-16、Big5、Shift-JIS 会落到 `E_DECODE`。

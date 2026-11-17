@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CHINA_TZ = dt.timezone(dt.timedelta(hours=8), "Asia/Shanghai")
 UTC = dt.timezone.utc
 
-RULE_VERSION = "qualiscore/1.0.0"
+RULE_VERSION = "qualiscore/1.1.0"
 SCORE_QUANT = Decimal("0.01")
 RATE_QUANT = Decimal("0.0001")
 HUNDRED = Decimal("100")
@@ -142,6 +142,7 @@ SEVERITY_BANDS: tuple[dict, ...] = (
 
 SAMPLES: dict[str, str] = {
     "tickets_dirty.csv": "脏样例 · 7 类问题",
+    "tickets_agents.csv": "受理人身份混用 · 歧义与别名",
     "tickets_clean.csv": "干净样例",
     "tickets_gbk.csv": "GB18030 编码",
     "tickets_bom.csv": "BOM + CRLF",
@@ -153,17 +154,36 @@ SAMPLES: dict[str, str] = {
 }
 DEFAULT_SAMPLE = "tickets_dirty.csv"
 
-STAGES = ("ingest", "profile", "missing", "duplicates", "outliers", "score", "export")
+# ---------- 受理人身份归属（M8） ----------
+# 映射文件按数据集名唯一（不含扩展名也可），内容是一张 CSV/JSON 形式的对照表。
+# 只做「标记值 → 坐席」的显式映射，绝不按姓名相似度自动合并：
+# 同名不同人靠工号区分，没有工号证据时进歧义桶，等人工裁决。
+AGENT_MAPPING_COLUMNS = ("raw", "agent_id", "display_name")
+AGENT_ATTRIBUTION_STATES = (
+    "attributed",   # 映射里唯一命中，缺口全部计入该坐席
+    "ambiguous",    # 同名多工号 / 仅姓名，不并入任何人，单列待裁决
+    "conflict",     # 同一标记值被映射到多个工号，整条映射拒用
+    "unmapped",     # 映射里没有这个标记值，保留原值待补映射
+    "no_identity",  # 受理人单元格本身缺失
+)
+# 样例自带的映射：只对列出的数据集生效，且只在库里还没有该数据集映射时加载
+AGENT_SAMPLE_MAPPINGS: dict[str, str] = {
+    "tickets_agents.csv": "agent_identities.csv",
+}
+
+STAGES = ("ingest", "profile", "missing", "duplicates", "outliers", "agents",
+          "score", "export")
 STAGE_LABELS = {
     "ingest": "采信",
     "profile": "画像",
     "missing": "缺失",
     "duplicates": "重复",
     "outliers": "离群",
+    "agents": "归属",
     "score": "评分",
     "export": "导出",
 }
-STAGE_FLOW = "采信 → 画像 → 缺失 → 重复 → 离群 → 评分"
+STAGE_FLOW = "采信 → 画像 → 缺失 → 重复 → 离群 → 归属 → 评分"
 
 
 @dataclass(frozen=True)

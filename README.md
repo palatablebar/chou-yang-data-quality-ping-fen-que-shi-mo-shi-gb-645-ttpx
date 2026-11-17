@@ -1,8 +1,8 @@
 # qualiscore — 抽样数据质量评分与缺失模式
 
 客服工单抽样数据的月度质量报告工具。一次运行把一份导出的 CSV 走完
-采信 → 画像 → 缺失 → 重复 → 离群 → 评分 → 导出，每个数字都能追回原始行号、
-原因码与运行清单。
+采信 → 画像 → 缺失 → 重复 → 离群 → 受理人归属 → 评分 → 导出，每个数字都能追回原始行号、
+原因码与运行清单；身份有歧义时同时给出「计入 / 未计入」两本账。
 
 - 一个 FastAPI 服务、Jinja2 模板、原生 HTML/CSS/JS、SQLite 存数据集与运行记录
 - 端口 `18204`（容器内 `8000`）
@@ -18,7 +18,8 @@
 | 重复判定 | 全行哈希账与业务键账分开；同键不同值的两行都保留原值并列出冲突列 |
 | 稳健离群 | 中位数 + MAD 稳健 z，MAD=0 回退 IQR/1.349，离散度低于刻度下限判退化 |
 | 评分 | 100 − 缺失 30 − 重复 25 − 离群 20 − 格式 25，每维按容忍度封顶，Decimal 计分 |
-| 批次与导出 | run_id、输入 sha256、版本自增、同输入幂等复用、陈旧提交 409、六种 CSV + 清单 JSON |
+| 受理人归属 | 工号 / 全名 / 英文名显式映射合并；同名不按姓名误并；歧义 / 冲突 / 未映射单列未计入账 |
+| 批次与导出 | run_id、输入 sha256、版本自增、同输入幂等复用、陈旧提交 409、发布事务回退、十一种 CSV + 清单 JSON |
 
 ## 功能模块
 
@@ -31,6 +32,7 @@
 | M5 稳健离群 | `GET /api/outliers`、页面 `/outliers` | `app/modules/m5_outliers/robust.py`、`zscore.py`、`flags.py` | `tests/test_m5_outliers.py` |
 | M6 评分与批次 | `POST /api/score`、`GET /api/batches`、`GET /api/reconcile`、页面 `/batches` | `app/modules/m6_score/score.py`、`grade.py`、`runstore.py`、`service.py` | `tests/test_m6_score.py` |
 | M7 报告导出 | `GET /`、`GET /api/export/*` | `app/modules/m7_export/report.py`、`csv_out.py`、`manifest_out.py` | `tests/test_m7_export.py` |
+| M8 受理人归属 | `GET /agents`、`GET/PUT/POST /api/agents/mapping`、`POST /api/agents/recompute` | `app/modules/m8_agents/attribution.py`、`service.py` | `tests/test_m8_agents.py` |
 
 ## 核心规则
 
@@ -43,8 +45,14 @@
    判退化，该列不判离群。阈值固定 `|z| > 3.5`。
 4. **评分**：每维扣分 = 封顶分 × min(1, 实际比率 ÷ 容忍度)，量化 0.01；
    总分 = 100 − 扣分之和，恒在 [0, 100]，`总分 + 扣分之和 = 100` 逐位成立。
-5. **幂等与版本**：同名数据集按内容 sha256 + 规则版本 + 阈值摘要识别，
+5. **幂等与版本**：同名数据集按内容 sha256 + 受理人映射摘要 + 规则版本 + 阈值摘要识别，
    同输入重跑返回同一运行记录；客户端版本落后于库里版本时返回 409。
+6. **身份归属**：只认显式映射，不按姓名相似度合并；同名不同工号分开成账，
+   只给姓名 / 映射冲突 / 未映射 / 受理人缺失四类进「未计入」账并保留行号；
+   映射摘要变化即触发缺口与报告的整份重算。
+7. **发布原子性**：运行行、数据集原文、映射与已发布指针同一事务提交；
+   中断整体回滚到上一完整版本，失败尝试落在 `publish_attempts` 不丢记录；
+   同附件同映射重跑命中幂等，不新增版本、不重复计数。
 
 ## 启动
 
@@ -59,11 +67,13 @@ open http://127.0.0.1:18204/
 ## 演示步骤
 
 1. 打开 `/`，样例选 `tickets_dirty.csv`，点「采信并评分」→ 报告页显示 65.24 分 C 级。
+   样例选 `tickets_agents.csv` 可看受理人归属：计入 20 行、未计入 10 行。
 2. `/profile` 看待映射列与格式不合格；`/missing` 看连续缺失段与共缺对。
 3. `/duplicates` 看全行重复组与 `T-2026-000204` 的冲突列。
 4. `/outliers` 看 `first_response_min` 的极端值与 `satisfaction` 的退化标记。
-5. `/batches` 看版本、阈值与五项对账；再点「重跑」验证幂等复用。
-6. 任一页面底部导出 CSV，或直接 `curl /api/export/manifest.json` 取运行清单。
+5. `/agents` 改受理人映射（例如给「陈允」补工号），保存后缺口与报告一起重算。
+6. `/batches` 看版本、阈值、五项质量账与归属账；再点「重跑」验证幂等复用。
+7. 任一页面底部导出 CSV，或直接 `curl /api/export/manifest.json` 取运行清单。
 
 ## API 与页面
 
@@ -82,20 +92,27 @@ open http://127.0.0.1:18204/
 | POST | `/api/score` | 跑一次评分（可带 `expected_version`） |
 | GET | `/api/batches` | 运行历史 |
 | GET | `/api/reconcile` | 五项对账 |
-| GET | `/api/export/report.csv` 等 | 六种 CSV + `manifest.json` |
-| GET | `/`、`/profile`、`/missing`、`/duplicates`、`/outliers`、`/batches` | 六个页面 |
+| GET | `/api/export/report.csv` 等 | 十一种 CSV + `manifest.json` |
+| GET | `/api/agents`、`/api/agents/unresolved` | 归属账与未计入账 |
+| GET | `/api/agents/mapping` | 读当前映射与其摘要 |
+| PUT | `/api/agents/mapping` | 上传映射并重算发布（`dry_run=true` 只校验） |
+| POST | `/api/agents/mapping` | JSON 内联映射并重算发布 |
+| POST | `/api/agents/recompute` | 不改映射，按当前映射重算发布 |
+| GET | `/api/publish/attempts` | 未发布的尝试记录 |
+| GET | `/`、`/profile`、`/missing`、`/duplicates`、`/outliers`、`/agents`、`/batches` | 七个页面 |
 
 ## 目录
 
 ```text
 app/
   main.py config.py errors.py reasons.py manifest.py store.py web.py
-  modules/m1_ingest … m7_export/   每个模块 handler + service + 3 个规则/读写文件
-  templates/  base.html + 6 页
+  modules/m1_ingest … m8_agents/   每个模块 handler + service + 3 个规则/读写文件
+  templates/  base.html + 7 页
   static/     theme.css layout.css components.css app.js table.js charts.js
 docs/         DEPTH.md DATA-DICTIONARY.md RUNBOOK.md
-sample_data/  9 个 CSV（脏、干净、GB18030、BOM、截断、常量列、仅表头、空行、空文件）
-tests/        conftest.py + 7 个模块测试 + e2e + invariants + fixtures
+sample_data/  10 个 CSV（脏、受理人身份、干净、GB18030、BOM、截断、常量列、仅表头、空行、空文件）
+              + agent_identities.csv（示例受理人映射：同名、仅姓名、自相矛盾）
+tests/        conftest.py + 8 个模块测试 + e2e + invariants + fixtures
 ```
 
 ## 定义与已覆盖

@@ -353,3 +353,15 @@ span.sev--pass { color: var(--ok); }
   .chart__plot { height: 110px; }
   .pairs--two { grid-template-columns: 1fr; }
 }
+
+/* 受理人归属：映射编辑区与未计入标记 */
+.field__input--area {
+  width: 100%;
+  min-height: 150px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.tag--warn { color: var(--warn); border-color: currentColor; }
+.tag--bad { color: var(--bad); border-color: currentColor; }
